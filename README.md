@@ -1,8 +1,22 @@
 # IMUPoser: Full-Body Pose Estimation using IMUs in Phones, Watches, and Earbuds
-Click to watch the video!
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=hgpjbKv8XFY"><img src="media/IMUPoser_github.png" alt="animated" width="100%"/></a>
-</p>
+
+## For me
+
+`Ubuntu=22.04`,`Python=3.8`,`cudatoolkit=11.8`,`pytorch-lightning>=2.0.0`
+(modified `requirements.txt`)
+
+```bash
+conda create -n "imuposer" python=3.8
+conda activate imuposer
+conda install cudatoolkit=11.8
+conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c python -c nvidia
+
+python -m pip install -r requirements.txt
+python -m pip install -e src/
+```
+
+## 
+
 
 Research code for IMUPoser (CHI 2023)
 

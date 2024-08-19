@@ -133,10 +133,11 @@ pred_joints_set = {
 }
 
 # Add more here if you want
-amass_datasets = ['ACCAD', 'BioMotionLab_NTroje', 'BMLhandball', 'BMLmovi', 'CMU',
+# modified
+amass_datasets = ['ACCAD', 'BMLhandball', 'BMLmovi', 'CMU',
                   'DanceDB', 'DFaust_67', 'EKUT', 'Eyes_Japan_Dataset', 'HUMAN4D',
-                  'HumanEva', 'KIT', 'MPI_HDM05', 'MPI_Limits', 'MPI_mosh', 'SFU',
-                  'SSM_synced', 'TCD_handMocap', 'TotalCapture', 'Transitions_mocap']
+                  'HumanEva', 'KIT', 'MPI_HDM05', 'MPI_mosh', 'SFU',
+                  'TCD_handMocap', 'TotalCapture', 'Transitions_mocap']
 
 leaf_joints = [20, 21, 7, 8, 12]
 
