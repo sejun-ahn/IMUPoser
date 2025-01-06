@@ -42,6 +42,11 @@ class IMUPoserModel(pl.LightningModule):
         self.lr = 3e-4
         self.save_hyperparameters()
 
+        # pytorch_lightning > 2.0.0
+        self.train_step_outputs = []
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+
     def forward(self, imu_inputs, imu_lens):
         pred_pose, _, _ = self.dip_model(imu_inputs, imu_lens)
         return pred_pose
@@ -63,6 +68,9 @@ class IMUPoserModel(pl.LightningModule):
 
         self.log(f"training_step_loss", loss.item(), batch_size=self.batch_size)
 
+        # pytorch_lightning > 2.0.0
+        self.train_step_outputs.append(loss)
+
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -82,6 +90,9 @@ class IMUPoserModel(pl.LightningModule):
 
         self.log(f"validation_step_loss", loss.item(), batch_size=self.batch_size)
 
+        # pytorch_lightning > 2.0.0
+        self.validation_step_outputs.append(loss)
+
         return {"loss": loss}
 
     def predict_step(self, batch, batch_idx):
@@ -99,8 +110,13 @@ class IMUPoserModel(pl.LightningModule):
             joint_pos_loss = self.loss(pred_joint, target_joint)
             loss += joint_pos_loss
 
+        # pytorch_lightning > 2.0.0
+        self.test_step_outputs.append(loss)
+
         return {"loss": loss.item(), "pred": pred_pose, "true": target_pose}
 
+    # pytorch_lightning < 2.0.0
+    """
     def training_epoch_end(self, outputs):
         self.epoch_end_callback(outputs, loop_type="train")
 
@@ -118,6 +134,22 @@ class IMUPoserModel(pl.LightningModule):
         # agg the losses
         avg_loss = torch.mean(torch.Tensor(loss))
         self.log(f"{loop_type}_loss", avg_loss, prog_bar=True, batch_size=self.batch_size)
+    """
+    # pytorch_lightning > 2.0.0
+    def on_train_epoch_end(self):
+        avg_loss = torch.stack(self.train_step_outputs).mean()
+        self.log(f"train_loss", avg_loss, prog_bar=True, batch_size=self.batch_size)
+        self.train_step_outputs.clear()
+
+    def on_validation_epoch_end(self):
+        avg_loss = torch.stack(self.validation_step_outputs).mean()
+        self.log(f"validation_loss", avg_loss, prog_bar=True, batch_size=self.batch_size)
+        self.validation_step_outputs.clear()
+
+    def on_test_epoch_end(self):
+        avg_loss = torch.stack(self.test_step_outputs).mean()
+        self.log(f"test_loss", avg_loss, prog_bar=True, batch_size=self.batch_size)
+        self.test_step_outputs.clear()
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
