@@ -4,6 +4,7 @@ data/raw
 # experiments
 checkpoints
 results
+environment.yml
 
 ProcessMocap
 
