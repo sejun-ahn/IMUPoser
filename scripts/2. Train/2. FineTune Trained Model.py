@@ -1,8 +1,3 @@
-# %%
-# %load_ext autoreload
-# %autoreload 2
-
-# %%
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
@@ -13,57 +8,39 @@ from imuposer.config import Config, amass_combos
 from imuposer.models.utils import get_model
 from imuposer.datasets.utils import get_datamodule
 from imuposer.utils import get_parser, get_checkpoints
-
-# set the random seed
+from imuposer.models.LSTMs.IMUPoser_Model import IMUPoserModel
 seed_everything(20241078, workers=True)
 
 parser = get_parser()
 args = parser.parse_args()
 combo_id = args.combo_id
-fast_dev_run = args.fast_dev_run
+fast_dev_run = False
 _experiment = args.experiment
-resume = args.resume
 ckpt_path = args.ckpt_path
 
-
-# %%
-config = Config(experiment=f"{_experiment}_{combo_id}", model="GlobalModelIMUPoser",
+config = Config(experiment=f"{_experiment}_{combo_id}", model="GlobalModelIMUPoserFineTuneDIP",
                 project_root_dir="../../", joints_set=amass_combos[combo_id], normalize="no_translation",
-                r6d=True, loss_type="mse", use_joint_loss=True, device="0") 
+                r6d=True, loss_type="mse", use_joint_loss=True, device="0")
 
-# %%
-# instantiate model and data
-model = get_model(config)
-datamodule = get_datamodule(config)
-checkpoint_path = config.checkpoint_path 
+model_ = IMUPoserModel.load_from_checkpoint(ckpt_path, strict=False)
+model = get_model(config=config, pretrained=model_)
 
-# %%
+datamodule = get_datamodule(config=config)
+checkpoint_path = config.checkpoint_path
+
 wandb_logger = WandbLogger(project=config.experiment, save_dir=checkpoint_path)
 
 early_stopping_callback = EarlyStopping(monitor="validation_step_loss", mode="min", verbose=False,
-                                        min_delta=0.00001, patience=1000)
+                                        min_delta=0.00001, patience=5)
 
 checkpoint_callback = ModelCheckpoint(monitor="validation_step_loss", mode="min", verbose=False, 
                                       save_top_k=5, dirpath=checkpoint_path, save_weights_only=False, 
                                       filename='epoch={epoch}-val_loss={validation_step_loss:.5f}')
 
-trainer = pl.Trainer(fast_dev_run=fast_dev_run, logger=wandb_logger, max_epochs=10000, accelerator="gpu", devices=[0, 1],
+trainer = pl.Trainer(fast_dev_run=fast_dev_run, logger=wandb_logger, max_epochs=100, accelerator="gpu", devices=[0, 1],
                      strategy="ddp", callbacks=[early_stopping_callback, checkpoint_callback], deterministic=True)
 
-# %%
-# trainer.fit(model, datamodule=datamodule)
+trainer.fit(model_, datamodule=datamodule)
 
-# %%
-
-if resume:
-    try:
-        trainer.fit(model, datamodule=datamodule, ckpt_path = ckpt_path)
-        print('Resume training from checkpoint')
-    except:
-        trainer.fit(model, datamodule=datamodule)
-        print('No checkpoint found, training from the bottom to the top')
-else:
-    trainer.fit(model, datamodule=datamodule)
-# %%
 with open(checkpoint_path / "best_model.txt", "w") as f:
     f.write(f"{checkpoint_callback.best_model_path}\n\n{checkpoint_callback.best_k_models}")

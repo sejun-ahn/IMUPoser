@@ -13,6 +13,7 @@ def get_parser():
     parser.add_argument('--resume', default=False, help='resume training from checkpoint', action="store_true")
     parser.add_argument('--experiment', help='Experiment name')
     parser.add_argument('--device', help='Device ID', default="0")
+    parser.add_argument('--ckpt_path', help='Checkpoint path', default="")
 
     return parser
 
@@ -29,15 +30,15 @@ def get_checkpoints(combo_id:str, model_names: list, path_to_checkpoints=Path(".
     # path_to_checkpoints = Path("../../checkpoints/")
 
     checkpoints = [x.name for x in path_to_checkpoints.iterdir() if combo_id in x.name]
-    
     best_ckpts = {}
 
     for model_name in model_names:
+        
         model_checkpoints = [x for x in checkpoints if model_name == x.split("_")[0]]
 
         # get the latest model_checkpoint
+        
         model_creation_dates = [datetime.strptime(x.split("-", 1)[1], "%m%d%Y-%H%M%S") for x in model_checkpoints]
-
         latest_model = model_checkpoints[np.argmax(model_creation_dates)]
 
         # now get the best ckpt

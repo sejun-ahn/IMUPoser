@@ -33,6 +33,11 @@ class IMUPoserModelFineTune(pl.LightningModule):
         self.lr = 3e-4
         self.save_hyperparameters(ignore=['pretrained_model'])
 
+        # pytorch_lightning > 2.0.0
+        self.train_step_outputs = []
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+
     def forward(self, imu_inputs, imu_lens):
         pred_pose = self.pretrained_model(imu_inputs, imu_lens)
         return pred_pose
@@ -46,14 +51,25 @@ class IMUPoserModelFineTune(pl.LightningModule):
         _target = target_pose
         target_pose = _target[:, :, :self.n_pose_output]
         loss = self.loss(pred_pose, target_pose)
+
+        # multi gpu training
+        pred_mat = r6d_to_rotation_matrix(pred_pose).to(pred_pose.device)
+        target_mat = r6d_to_rotation_matrix(target_pose).to(target_pose.device)
+
         if self.config.use_joint_loss:
-            pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
-            target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            # multi gpu training
+            # pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
+            # target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            pred_joint = self.bodymodel.forward_kinematics(pose=pred_mat.view(-1, 216))[1]
+            target_joint = self.bodymodel.forward_kinematics(pose=target_mat.view(-1, 216))[1]
             joint_pos_loss = self.loss(pred_joint, target_joint)
             loss += joint_pos_loss
 
         self.log(f"training_step_loss", loss.item(), batch_size=self.batch_size)
-
+        
+        # pytorch_lightning > 2.0.0
+        self.train_step_outputs.append(loss)
+        
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -64,14 +80,25 @@ class IMUPoserModelFineTune(pl.LightningModule):
         pred_pose = _pred[:, :, :self.n_pose_output]
         _target = target_pose
         target_pose = _target[:, :, :self.n_pose_output]
+
+        # multi gpu training
+        pred_mat = r6d_to_rotation_matrix(pred_pose).to(pred_pose.device)
+        target_mat = r6d_to_rotation_matrix(target_pose).to(target_pose.device)
+
         loss = self.loss(pred_pose, target_pose)
         if self.config.use_joint_loss:
-            pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
-            target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            # multi gpu training
+            # pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
+            # target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            pred_joint = self.bodymodel.forward_kinematics(pose=pred_mat.view(-1, 216))[1]
+            target_joint = self.bodymodel.forward_kinematics(pose=target_mat.view(-1, 216))[1]
             joint_pos_loss = self.loss(pred_joint, target_joint)
             loss += joint_pos_loss
 
         self.log(f"validation_step_loss", loss.item(), batch_size=self.batch_size)
+
+        # pytorch_lightning > 2.0.0
+        self.validation_step_outputs.append(loss)
 
         return {"loss": loss}
 
@@ -83,15 +110,29 @@ class IMUPoserModelFineTune(pl.LightningModule):
         pred_pose = _pred[:, :, :self.n_pose_output]
         _target = target_pose
         target_pose = _target[:, :, :self.n_pose_output]
+
+        # multi gpu training
+        pred_mat = r6d_to_rotation_matrix(pred_pose).to(pred_pose.device)
+        target_mat = r6d_to_rotation_matrix(target_pose).to(target_pose.device)
+
         loss = self.loss(pred_pose, target_pose)
         if self.config.use_joint_loss:
-            pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
-            target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            # multi gpu training
+            # pred_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(pred_pose).view(-1, 216))[1]
+            # target_joint = self.bodymodel.forward_kinematics(pose=r6d_to_rotation_matrix(target_pose).view(-1, 216))[1] ## If training is slow, get this from the dataloader
+            pred_joint = self.bodymodel.forward_kinematics(pose=pred_mat.view(-1, 216))[1]
+            target_joint = self.bodymodel.forward_kinematics(pose=target_mat.view(-1, 216))[1]
+            
             joint_pos_loss = self.loss(pred_joint, target_joint)
             loss += joint_pos_loss
 
+        # pytorch_lightning > 2.0.0
+        self.test_step_outputs.append(loss)
+
         return {"loss": loss.item(), "pred": pred_pose, "true": target_pose}
 
+    # pytorch_lightning < 2.0.0
+    """
     def training_epoch_end(self, outputs):
         self.epoch_end_callback(outputs, loop_type="train")
 
@@ -109,6 +150,23 @@ class IMUPoserModelFineTune(pl.LightningModule):
         # agg the losses
         avg_loss = torch.mean(torch.Tensor(loss))
         self.log(f"{loop_type}_loss", avg_loss, prog_bar=True, batch_size=self.batch_size)
+    """
+
+    # pytorch_lightning > 2.0.0
+    def on_train_epoch_end(self):
+        avg_loss = torch.stack(self.train_step_outputs).mean()
+        self.log(f"train_loss", avg_loss, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        self.train_step_outputs.clear()
+
+    def on_validation_epoch_end(self):
+        avg_loss = torch.stack(self.validation_step_outputs).mean()
+        self.log(f"validation_loss", avg_loss, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        self.validation_step_outputs.clear()
+
+    def on_test_epoch_end(self):
+        avg_loss = torch.stack(self.test_step_outputs).mean()
+        self.log(f"test_loss", avg_loss, prog_bar=True, batch_size=self.batch_size, sync_dist=True)
+        self.test_step_outputs.clear()
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)

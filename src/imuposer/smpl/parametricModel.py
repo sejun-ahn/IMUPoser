@@ -226,7 +226,7 @@ class ParametricModel:
         pose = pose.view(pose.shape[0], -1, 3, 3)
         j, v = [_.expand(pose.shape[0], -1, -1) for _ in self.get_zero_pose_joint_and_vertex(shape)]
 
-        T_local = M.transformation_matrix(pose, self.joint_position_to_bone_vector(j))
+        T_local = M.transformation_matrix(pose, self.joint_position_to_bone_vector(j).to(pose.device))
         T_global = self.forward_kinematics_T(T_local)
         pose_global, joint_global = M.decode_transformation_matrix(T_global)
         if calc_mesh is False:
